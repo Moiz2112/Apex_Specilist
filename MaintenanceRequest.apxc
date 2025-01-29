@@ -1,0 +1,5 @@
+trigger MaintenanceRequest on Case (After Update) {
+    if (Trigger.isAfter && Trigger.isUpdate) {
+         MaintenanceRequestHelper.processMaintenanceRequests(Trigger.NEW, Trigger.oldMap);
+    }
+}
