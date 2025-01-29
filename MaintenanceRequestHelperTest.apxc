@@ -1,0 +1,51 @@
+@isTest
+public with sharing class MaintenanceRequestHelperTest {
+    @testSetup
+    public static void testData() {
+        Vehicle__c vehicle = new Vehicle__c(Name = 'HAMMAR'); 
+        insert vehicle;
+
+        List<Product2> equipList = new List<Product2>();
+        Product2 equipment1 = new Product2(Name = 'Generator', Replacement_Part__c = true, Maintenance_Cycle__c = 10, Cost__c = 1200);
+        equipList.add(equipment1);
+        Product2 equipment2 = new Product2(Name = 'Fuse 20A', Replacement_Part__c = true, Maintenance_Cycle__c = 30, Cost__c = 1300);
+        equipList.add(equipment2);
+        Product2 equipment3 = new Product2(Name = 'Converter', Replacement_Part__c = true, Maintenance_Cycle__c = 5, Cost__c = 1700);
+        equipList.add(equipment3);
+
+        insert equipList;
+
+        Case newCase = new Case();
+        newCase.Subject = 'Test data';
+        newCase.Origin = 'Web';
+        newCase.Status = 'New';
+        newCase.Type = 'Repair';
+        newCase.Vehicle__c = vehicle.Id;
+        insert newCase;
+
+        List<Equipment_Maintenance_Item__c> EMI = new List<Equipment_Maintenance_Item__c>();
+        Equipment_Maintenance_Item__c Maintenance1 = new Equipment_Maintenance_Item__c(Equipment__c = equipment1.Id, Maintenance_Request__c = newCase.Id);
+        EMI.add(Maintenance1);
+
+        Equipment_Maintenance_Item__c Maintenance2 = new Equipment_Maintenance_Item__c(Equipment__c = equipment2.Id, Maintenance_Request__c = newCase.Id);
+        EMI.add(Maintenance2);
+        
+        Equipment_Maintenance_Item__c Maintenance3 = new Equipment_Maintenance_Item__c(Equipment__c = equipment3.Id, Maintenance_Request__c = newCase.Id);
+        EMI.add(Maintenance3);
+        insert EMI;
+    }
+
+    @isTest
+    public static void testShortestCycleInitialization() {
+        List<Case> oldCases = [SELECT Id, Subject, Status FROM Case WHERE Origin = 'Web'];
+        Test.startTest();
+        for (Case c : oldCases) {
+            c.Status = 'Closed';
+        }
+        update oldCases;
+        Test.stopTest();
+
+        Case newCase = [SELECT Id, Status, Type FROM Case WHERE Status = 'New'];
+        System.assertEquals('Routine Maintenance', newCase.Type);
+    }
+}
