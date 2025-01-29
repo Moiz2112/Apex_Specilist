@@ -1,0 +1,14 @@
+@isTest
+public with sharing class WarehouseSyncScheduleTest {
+  @isTest static void WarehouseSchedule(){
+      String CRON_EXP = '00 00 01 * * ?';
+      Test.startTest();
+      Test.setMock(HttpCalloutMock.class, new WarehouseCalloutServiceMock());
+      String jobId = System.Schedule('WarehouseSyncScheduleJob' , CRON_EXP , new WarehouseSyncSchedule());
+      Test.stopTest();
+      
+        CronTrigger ct = [Select Id From cronTrigger Where NextFireTime>today Limit 1];
+        System.assertEquals(jobId , ct.Id);
+      
+  }
+}
