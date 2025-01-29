@@ -1,0 +1,42 @@
+public with sharing class WarehouseCalloutService implements Queueable{
+
+    private static final String WAREHOUSE_URL = 'https://th-superbadge-apex.herokuapp.com/equipment';
+     @future(Callout = true)
+      public static void makeCallout(){
+        Http http = new Http();
+        HttpRequest req = new HttpRequest();
+        req.setMethod('GET');
+        req.setEndpoint(WAREHOUSE_URL);
+        
+        HttpResponse response = http.send(req);
+        System.debug('status Code'+ response.getStatusCode());
+        List<Product2> prodList = new List<Product2>(); 
+        if(response.getStatusCode() == 200){
+            List<Object> result = (List<Object>)JSON.deserializeUntyped(response.getBody());
+            System.debug(response.getBody());
+            for(Object Fetchproduct : result){
+                Map<String, Object> FetchResult = (Map<String, Object>)Fetchproduct;
+                
+                Product2 newproduct = new Product2();
+                newproduct.Replacement_Part__c = (Boolean)FetchResult.get('replacement');
+                newproduct.Current_Inventory__c = (Double)FetchResult.get('quantity');
+                newproduct.Name = (String)FetchResult.get('name');
+                newproduct.Maintenance_Cycle__c =(Integer)FetchResult.get('maintenanceperiod');
+                newproduct.Cost__c = (Integer)FetchResult.get('cost');      
+                newproduct.Lifespan_Months__c = (Integer)FetchResult.get('lifespan');
+                newproduct.Warehouse_SKU__c = (String)FetchResult.get('sku');
+                
+                prodList.add(newproduct);
+        }
+            if(prodList.size()>0){ 
+                upsert prodList;
+                System.debug('@@@newProduct'+prodList);
+            }
+        }
+    }
+    public void execute(System.QueueableContext context){
+        System.debug(Context);
+        WarehouseCalloutService.makeCallout();
+    }
+    
+}
