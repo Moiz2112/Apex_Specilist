@@ -1,0 +1,106 @@
+public with sharing class MaintenanceRequestHelper {
+    public static void processMaintenanceRequests(List<Case> updatedCases, Map<Id, Case> oldCaseMap) {
+       
+        List<Case> closedRequests = getClosedRequests(updatedCases, oldCaseMap);
+        System.debug('@@closedRequest'+closedRequests);
+        if (!closedRequests.isEmpty()) {
+            createFutureMaintenanceRequests(closedRequests);
+        }
+    }
+
+    public static List<Case> getClosedRequests(List<Case> updatedCases, Map<Id, Case> oldCaseMap) {
+        List<Case> closedRequests = new List<Case>();
+        for (Case c : updatedCases) {
+            Case oldCase = oldCaseMap.get(c.Id);
+            if (c.Status == 'Closed' && oldCase.Status != 'Closed' && (c.Type == 'Repair' || c.Type == 'Routine Maintenance')) {
+                closedRequests.add(c);
+            }
+        }
+        return closedRequests;
+    }
+
+     public static void createFutureMaintenanceRequests(List<Case> closedRequests) {
+        List<Case> newRequests = new List<Case>();
+        List<Equipment_Maintenance_Item__c> newEquipmentItems = new List<Equipment_Maintenance_Item__c>();
+        Map<Id, List<Product2>> equipmentMap = getRelatedEquipment(closedRequests);
+
+        for (Case closedCase : closedRequests) {
+            List<Product2> relatedEquipment = equipmentMap.get(closedCase.Id);
+
+            if (relatedEquipment != null && !relatedEquipment.isEmpty()) {
+              Integer shortestCycle = null;
+             for (Product2 equipment : relatedEquipment) {
+                if (equipment.Maintenance_Cycle__c != null) {
+                    if (shortestCycle == null) {
+                       shortestCycle = equipment.Maintenance_Cycle__c.intValue();  
+                        } 
+                    else if (equipment.Maintenance_Cycle__c < shortestCycle) {
+                       shortestCycle = equipment.Maintenance_Cycle__c.intValue();
+               }
+            }
+         }
+ 
+                Case newRequest = new Case();
+                newRequest.Type = 'Routine Maintenance';
+                newRequest.Subject = 'Routine Checkup';
+                newRequest.Date_Reported__c = Date.today();
+                newRequest.Date_Due__c = Date.today().addDays(shortestCycle);
+                newRequest.Vehicle__c = closedCase.Vehicle__c;
+                newRequest.ProductId = closedCase.ProductId;
+                newRequest.status = 'New';
+
+                newRequests.add(newRequest);
+            }
+        }
+
+         if (!newRequests.isEmpty()) {
+            insert newRequests;
+             System.debug('new Case'+newRequests);
+             Map<Id, Id> newToOldCaseMap = new Map<Id, Id>();
+            for (Integer i = 0; i < newRequests.size(); i++) {
+                newToOldCaseMap.put(newRequests[i].Id, closedRequests[i].Id);
+            }
+
+            for (Case newRequest : newRequests) {
+                Id oldRequestId = newToOldCaseMap.get(newRequest.Id);
+                List<Product2> relatedEquipment = equipmentMap.get(oldRequestId);
+
+                if (relatedEquipment != null) {
+                    for (Product2 equipment : relatedEquipment) {
+                        Equipment_Maintenance_Item__c newItem = new Equipment_Maintenance_Item__c();
+                        newItem.Maintenance_Request__c = newRequest.Id;
+                        newItem.Equipment__c = equipment.Id;
+                        newEquipmentItems.add(newItem);
+                    }
+                }
+            }
+
+             if (!newEquipmentItems.isEmpty()) {
+                insert newEquipmentItems;
+            }
+        }
+    }
+
+     public static Map<Id, List<Product2>> getRelatedEquipment(List<Case> closedRequests) {
+        Set<Id> requestIds = new Set<Id>();
+        for (Case c : closedRequests) {
+            requestIds.add(c.Id);
+        }
+
+         Map<Id, List<Product2>> equipmentMap = new Map<Id, List<Product2>>();
+        List<Equipment_Maintenance_Item__c> equipmentItems = [
+               SELECT Maintenance_Request__c, Equipment__c, Equipment__r.Maintenance_Cycle__c
+               FROM Equipment_Maintenance_Item__c
+               WHERE Maintenance_Request__c IN :requestIds
+                ];
+
+         for (Equipment_Maintenance_Item__c item : equipmentItems) {
+              if (!equipmentMap.containsKey(item.Maintenance_Request__c)) {
+                   equipmentMap.put(item.Maintenance_Request__c, new List<Product2>());
+                 }
+              equipmentMap.get(item.Maintenance_Request__c).add(item.Equipment__r);
+}
+
+        return equipmentMap;
+    }
+}
